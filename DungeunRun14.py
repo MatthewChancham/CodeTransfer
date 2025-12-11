@@ -560,10 +560,11 @@ class Player:
         self.skills.clear()
         if self.class_name=='Mage':
             self.skills.append({'skill': mana_bolt,'name':'Mana Bolt','key':1,'level':1,'cooldown':0.5,'last_used':0,'cooldown_mod':1.0})
-            self.skills.append({'skill': mana_shield,'name':'Mana Shield','key':0,'level':5,'cooldown':2,'last_used':0,'cooldown_mod':1.0})
-            self.skills.append({'skill': fireball,'name':'Fireball','key':0,'level':10,'cooldown':1.5,'last_used':0,'cooldown_mod':1.0})
-            self.skills.append({'skill': icicle,'name':'Icicle','key':0,'level':10,'cooldown':1.5,'last_used':0,'cooldown_mod':1.0})
-            self.skills.append({'skill': chain_lightning,'name':'Chain Lightning','key':0,'level':15,'cooldown':2,'last_used':0,'cooldown_mod':1.0})
+            self.skills.append({'skill': mana_shield,'name':'Mana Shield','key':0,'level':1,'cooldown':2,'last_used':0,'cooldown_mod':1.0})
+            self.skills.append({'skill': fireball,'name':'Fireball','key':0,'level':1,'cooldown':1.5,'last_used':0,'cooldown_mod':1.0})
+            self.skills.append({'skill': icicle,'name':'Icicle','key':0,'level':1,'cooldown':1.5,'last_used':0,'cooldown_mod':1.0})
+            self.skills.append({'skill': chain_lightning,'name':'Chain Lightning','key':0,'level':1,'cooldown':2,'last_used':0,'cooldown_mod':1.0})
+            self.skills.append({'skill': chain_lightning,'name':'Chain Lightning','key':0,'level':1,'cooldown':2,'last_used':0,'cooldown_mod':1.0})
         elif self.class_name=='Warrior':
             self.skills.append({'skill': strike,'name':'Strikes','key':1,'level':1,'cooldown':0.2,'last_used':0,'cooldown_mod':1.0})
             self.skills.append({'skill': ground_pound,'name':'Ground Pound','key':0,'level':5,'cooldown':0.5,'last_used':0,'cooldown_mod':1.0})
@@ -2045,39 +2046,59 @@ class GameFrame(tk.Frame):
         win = tk.Toplevel(self)
         win.title("Skill Management")
         win.geometry("500x600")
+        win.configure(bg="#1a1a1a")  # dark background
 
         # --- Top: Active skills ---
-        ttk.Label(win, text="Active Skills (Keybinds)", font=("Arial", 14, "bold")).pack(pady=10)
+        active_box = tk.Frame(win, bg="#2a2a2a", bd=0, relief="flat")
+        active_box.pack(pady=10, padx=15, fill="x")
 
-        self.active_frame = ttk.Frame(win)
-        self.active_frame.pack(pady=5)
+        tk.Label(active_box, text="Active Skills (Keybinds)",
+                 font=("Arial", 14, "bold"),
+                 bg="#2a2a2a", fg="#b0b0b0").pack(pady=5)
+
+        self.active_frame = tk.Frame(active_box, bg="#2a2a2a")
+        self.active_frame.pack(pady=5, fill="x")
         self.refresh_active_skills()
 
-        # --- Bottom: Unlocked skills with assignment buttons ---
-        ttk.Label(win, text="Unlocked Skills", font=("Arial", 14, "bold")).pack(pady=10)
+        # --- Divider line ---
+        divider = tk.Frame(win, bg="#333333", height=2)
+        divider.pack(fill="x", pady=10)
 
-        all_frame = ttk.Frame(win)
+        # --- Bottom: Unlocked skills ---
+        unlocked_box = tk.Frame(win, bg="#2a2a2a", bd=0, relief="flat")
+        unlocked_box.pack(pady=10, padx=15, fill="both", expand=True)
+
+        tk.Label(unlocked_box, text="Unlocked Skills",
+                 font=("Arial", 14, "bold"),
+                 bg="#2a2a2a", fg="#b0b0b0").pack(pady=5)
+
+        # Grid for unlocked skills
+        all_frame = tk.Frame(unlocked_box, bg="#2a2a2a")
         all_frame.pack(fill="both", expand=True)
 
-        # Loop through unlocked skills only
         for i, sk in enumerate(self.player.unlocked_skills):
-            row = ttk.Frame(all_frame)
-            row.grid(row=i//2, column=i%2, padx=5, pady=5, sticky="ew")
+            row = tk.Frame(all_frame, bg="#3a3a3a", padx=10, pady=10)
+            row.grid(row=i//2, column=i%2, padx=10, pady=10, sticky="nsew")
 
-            # Skill name centered above the buttons
-            name_label = ttk.Label(row, text=sk['name'], anchor="center", font=("Arial", 11, "bold"))
-            name_label.pack(fill="x", pady=(0, 3))  # fill across row, small gap below
+            # Skill name
+            name_label = tk.Label(row, text=sk['name'],
+                                  anchor="center", font=("Arial", 11, "bold"),
+                                  bg="#3a3a3a", fg="#b0b0b0")
+            name_label.pack(fill="x", pady=(0, 5))
 
-            # Slot buttons 1–5
-            btn_frame = ttk.Frame(row)
+            # Slot buttons
+            btn_frame = tk.Frame(row, bg="#3a3a3a")
             btn_frame.pack()
             for slot in range(1, 6):
-                b = ttk.Button(btn_frame, text=str(slot),
-                               width=3,
-                               command=lambda s=slot, skill=sk: self.assign_skill(skill, s))
+                b = tk.Button(btn_frame, text=str(slot),
+                              width=3,
+                              font=("Arial", 10, "bold"),
+                              bg="#4a4a4a", fg="#b0b0b0",
+                              activebackground="#5a5a5a",
+                              activeforeground="#b0b0b0",
+                              command=lambda s=slot, skill=sk: self.assign_skill(skill, s))
                 b.pack(side="left", padx=2)
 
-        # Make columns expand evenly
         all_frame.grid_columnconfigure(0, weight=1)
         all_frame.grid_columnconfigure(1, weight=1)
 
@@ -2087,23 +2108,66 @@ class GameFrame(tk.Frame):
         for w in self.active_frame.winfo_children():
             w.destroy()
 
-        # Show current active skills
+        # Show slots 1–5 on the Y axis
         for slot in range(1, 6):
-            assigned = next((sk for sk in self.player.unlocked_skills if sk.get('key') == slot), None)
-            name = assigned['name'] if assigned else "Empty"
-            ttk.Label(self.active_frame, text=f"Slot {slot}: {name}", font=("Arial", 12)).pack(anchor="w")
+            row = tk.Frame(self.active_frame, bg="#2a2a2a", padx=8, pady=5)
+            row.pack(fill="x", pady=3)
+
+            # Slot number label on the left
+            slot_label = tk.Label(row,
+                                  text=str(slot),
+                                  font=("Arial", 12, "bold"),
+                                  bg="#2a2a2a", fg="#b0b0b0", width=3)
+            slot_label.pack(side="left", padx=(0, 10))
+
+            # Find skill assigned to this slot (if any)
+            assigned_skill = None
+            for sk in self.player.unlocked_skills:
+                if sk.get("assigned_slot") == slot:
+                    assigned_skill = sk
+                    break
+
+            if assigned_skill:
+                # Skill name
+                name_label = tk.Label(row,
+                                      text=assigned_skill['name'],
+                                      font=("Arial", 12, "bold"),
+                                      bg="#2a2a2a", fg="#b0b0b0")
+                name_label.pack(side="left")
+
+                # Keybind + cooldown info
+                info_label = tk.Label(row,
+                                      text=f"Key: {assigned_skill['key']} | CD: {assigned_skill['cooldown']}s",
+                                      font=("Arial", 11),
+                                      bg="#2a2a2a", fg="#808080")
+                info_label.pack(side="right")
+            else:
+                # Empty slot placeholder    
+                empty_label = tk.Label(row,
+                                       text="Empty",
+                                       font=("Arial", 11, "italic"),
+                                       bg="#2a2a2a", fg="#555555")
+                empty_label.pack(side="left")
+
 
     def assign_skill(self, skill, slot):
-        # Update skill's keybind
-        skill['key'] = slot
-
-        # Ensure only one skill per slot
+        """
+        Assign a skill to a specific slot (1–5) and update its keybind.
+        """
+        # First, clear any skill already in this slot
         for sk in self.player.unlocked_skills:
-            if sk is not skill and sk['key'] == slot:
-                sk['key'] = None
+            if sk.get("assigned_slot") == slot:
+                sk["assigned_slot"] = None
+                sk["key"] = 0  # reset keybind
 
-        # Refresh display
+        # Assign this skill to the chosen slot
+        skill["assigned_slot"] = slot
+        skill["key"] = slot   # update keybind to match slot number
+
+        # Refresh the active skills display
         self.refresh_active_skills()
+
+
     def get_room(self, row, col):
         key = (row, col)
         if key not in self.dungeon:
