@@ -17,7 +17,7 @@ except:
 # Get the DPI scaling factor
 try:
     dpi = ctypes.windll.user32.GetDpiForSystem()
-    SCALE_FACTOR = dpi / 75
+    SCALE_FACTOR = dpi / 60
 except:
     SCALE_FACTOR = 0.8
 
