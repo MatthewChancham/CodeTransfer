@@ -4045,7 +4045,7 @@ class Particle:
         elif self.rtype == "slash_line":
             for e in list(game.room.enemies):
                 if distance((self.x, self.y), (e.x, e.y)) <= self.size:
-                    game.damage_enemy(e, game.player.atk * 0.6)
+                    game.damage_enemy(e, game.player.atk * 0.05)
             
         elif self.atype == "firetrap":
             # Check each enemy in the room
@@ -4120,7 +4120,7 @@ class Particle:
                 # damage enemies
                 for e in list(game.room.enemies):
                     if distance((self.x, self.y), (e.x, e.y)) <= self.size:
-                        game.damage_enemy(e, self.damage or game.player.mag * 0.09)
+                        game.damage_enemy(e, self.damage or game.player.mag * 0.035)
             elif self.owner == "enemy":
                 # damage player
                 if distance((self.x, self.y), (game.player.x, game.player.y)) <= self.size:
