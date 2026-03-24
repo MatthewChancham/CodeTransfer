@@ -193,10 +193,10 @@ class Player:
         
         # Base stats - Monk gets different starting stats
         if class_name == 'Monk':
-            self.strength=5; self.vitality=10; self.agility=5  # +5 VIT
+            self.strength=5; self.vitality=10; self.agility=30  # +5 VIT
             self.intelligence=-1000; self.wisdom=0; self.will=0; self.constitution=5
         else:
-            self.strength=5; self.vitality=5; self.agility=5
+            self.strength=5; self.vitality=5; self.agility=30
             self.intelligence=5; self.wisdom=5; self.will=5; self.constitution=3
         
         self.level=1; self.xp=0; self.xp_to_next=100
@@ -813,7 +813,7 @@ class Player:
             spawn_y = py + math.sin(angle_center) * offset
 
             # Spawn blade particle at the offset position
-            blade_particle = Particle(spawn_x, spawn_y, arc_radius, 'cyan', life=0.3, rtype='blade1', angle=angle_center)
+            blade_particle = Particle(spawn_x, spawn_y, 22, 'cyan', life=0.35, rtype='blade1_fwd', angle=angle_center)
             game.particles.append(blade_particle)
 
             for e in list(game.room.enemies):
@@ -847,7 +847,7 @@ class Player:
             spawn_y = py + math.sin(angle_center) * offset
 
             # Spawn blade particle at the offset position
-            blade_particle = Particle(spawn_x, spawn_y, arc_radius, 'red', life=0.3, rtype='blade1', angle=angle_center)
+            blade_particle = Particle(spawn_x, spawn_y, 22, 'red', life=0.35, rtype='blade1_fwd', angle=angle_center)
             game.particles.append(blade_particle)
 
             for e in list(game.room.enemies):
@@ -871,11 +871,11 @@ class Player:
             angle_center = math.atan2(_my - player.y, _mx - player.x)
 
             # Slash parameters
-            arc_radius = 40          # reach
+            arc_radius = 24          # reach
             arc_width = math.pi / 3  # angular width
 
             # Offset origin forward so blade appears in front
-            offset = arc_radius // 2
+            offset = arc_radius * 0.2
             origin_x = player.x + math.cos(angle_center) * offset
             origin_y = player.y + math.sin(angle_center) * offset
 
@@ -884,9 +884,9 @@ class Player:
                 origin_x, origin_y,
                 arc_radius,
                 'purple',
-                life=0.3,
+                life=0.25,
                 rtype='blade',
-                angle=angle_center,
+                angle=angle_center - 0.4,
                 damage=0  # visual only
             )
             game.particles.append(blade_particle)
@@ -2931,7 +2931,7 @@ CONSUMABLE_SHOP_ITEMS = [
 class CoinParticle:
     def __init__(self,x,y,value):
         self.x=x+random.randint(-20,20); self.y=y+random.randint(-20,20)
-        self.value=value; self.lifetime=50.0; self.size=7
+        self.value=value; self.lifetime=12.0; self.size=7
         self._bob=random.uniform(0,math.pi*2)
 
     def update(self,dt):
@@ -3620,7 +3620,7 @@ def enemy_strike(enemy, game):
     offset = arc_radius // 1
     spawn_x = px + math.cos(angle_center) * offset
     spawn_y = py + math.sin(angle_center) * offset
-    blade_particle = Particle(spawn_x, spawn_y, arc_radius, 'gray', life=0.3, rtype='eblade1', angle=angle_center, damage=enemy.atk*1.5)
+    blade_particle = Particle(spawn_x, spawn_y, 22, 'gray', life=0.35, rtype='eblade1_fwd', angle=angle_center, damage=enemy.atk*1.5)
     game.particles.append(blade_particle)
 
     # Damage player if inside arc
@@ -3671,9 +3671,9 @@ def enemy_dark_slash(enemy, game):
     blade_particle = Particle(
         origin_x, origin_y,
         arc_radius, 'grey',
-        life=0.3,
+        life=0.4,
         rtype='eblade',
-        angle=angle_center,
+        angle=angle_center - 0.6,
         damage=0
     )
     game.particles.append(blade_particle)
@@ -4229,7 +4229,7 @@ class Particle:
             # Check if player is inside the particle radius
             if distance((self.x, self.y), (game.player.x, game.player.y)) <= self.size:
                 game.damage_player(self.damage)
-        if self.rtype == "eblade1":
+        if self.rtype in ("eblade1", "eblade1_fwd"):
             if distance((self.x, self.y), (game.player.x, game.player.y)) <= self.size:
                 game.damage_player(self.damage)
         # --- add this inside Particle.update() ---
@@ -4372,6 +4372,61 @@ class Particle:
             angle = self.angle + swing
             self.x = px + math.cos(angle) * reach
             self.y = py + math.sin(angle) * reach
+
+        # Forward lunge for eblade1_fwd (enemy strike) — fixed world lunge from spawn
+        if self.rtype == "eblade1_fwd":
+            total_life = getattr(self, '_total_life', None)
+            if total_life is None:
+                self._total_life = self.life + self.age
+                total_life = self._total_life
+                self._base_size = self.size
+                self._start_x = self.x
+                self._start_y = self.y
+            progress = self.age / total_life
+            travel = self._base_size * 1.5 * progress
+            self.x = self._start_x + math.cos(self.angle) * (self._base_size * 0.5 + travel)
+            self.y = self._start_y + math.sin(self.angle) * (self._base_size * 0.5 + travel)
+            self.size = self._base_size
+
+        # Forward lunge animation for blade1_fwd (strike skill) — stays attached to player
+        if self.rtype == "blade1_fwd":
+            total_life = getattr(self, '_total_life', None)
+            if total_life is None:
+                self._total_life = self.life + self.age
+                total_life = self._total_life
+                self._base_size = self.size
+            progress = self.age / total_life
+            px, py = game.player.x, game.player.y
+            # Quick lunge forward
+            travel = self._base_size * 1.8 * progress
+            self.x = px + math.cos(self.angle) * (self._base_size * 0.5 + travel)
+            self.y = py + math.sin(self.angle) * (self._base_size * 0.5 + travel)
+            # Size stays fixed (no expansion)
+            self.size = self._base_size
+            for e in list(game.room.enemies):
+                if distance((self.x, self.y), (e.x, e.y)) <= self.size:
+                    dmg = game.player.vit if game.player.class_name == 'Monk' else game.player.atk
+                    game.damage_enemy(e, dmg)
+
+        # Sweep animation for blade/blade1/eblade1: rotate left->right, stays attached to player
+        if self.rtype in ("blade", "blade1", "eblade1"):
+            total_life = getattr(self, '_total_life', None)
+            if total_life is None:
+                self._total_life = self.life + self.age  # capture on first tick
+                total_life = self._total_life
+            if not hasattr(self, '_base_size'):
+                self._base_size = self.size
+            progress = self.age / total_life  # 0->1 over lifetime
+            sweep_range = 1.0 if self.rtype == "blade" else 1.50  # blade gets tight quick arc
+            self._sweep_offset = -sweep_range / 2 + sweep_range * progress
+            grow = min(progress * 2, 1.0)
+            self.size = self._base_size * (1.0 + 0.6 * grow)
+            # Always orbit around the CURRENT player position
+            px, py = game.player.x, game.player.y
+            swept_angle = self.angle + self._sweep_offset
+            orbit_dist = self._base_size * 1.2
+            self.x = px + math.cos(swept_angle) * orbit_dist
+            self.y = py + math.sin(swept_angle) * orbit_dist
 
         self.age += dt
         return self.life > 0
@@ -10183,51 +10238,36 @@ class GameFrame(tk.Frame):
 
 
             elif part.rtype == "blade":
-                # --- CLEAN TAPERED CRESCENT BLADE ---
+                # --- ANIMATED SWEEPING CRESCENT ---
                 r = part.size * 1.5
-                max_thickness = part.size * 0.45   # thick in the middle
-                angle = part.angle
+                max_thickness = part.size * 0.45
+                sweep_off = getattr(part, "_sweep_offset", 0.0)
+                angle = part.angle + sweep_off
                 cx, cy = part.x, part.y
-
-                # Rotation helper
-                def rot(x, y):
-                    return (
-                        cx + x * math.cos(angle) - y * math.sin(angle),
-                        cy + x * math.sin(angle) + y * math.cos(angle)
-                    )
-
-                outer = []
-                inner = []
-
-                # Build outer arc and thin inner arc
+                total_life = getattr(part, "_total_life", max(part.life + part.age, 0.001))
+                progress = part.age / total_life
+                alpha = max(0.0, 1.0 - max(0.0, (progress - 0.6) / 0.4))
+                try:
+                    rv = int(self.canvas.winfo_rgb(part.color)[0] / 256 * alpha)
+                    gv = int(self.canvas.winfo_rgb(part.color)[1] / 256 * alpha)
+                    bv = int(self.canvas.winfo_rgb(part.color)[2] / 256 * alpha)
+                    draw_color = f"#{rv:02x}{gv:02x}{bv:02x}"
+                except Exception:
+                    draw_color = part.color
+                def _rot(x, y, _cx=cx, _cy=cy, _a=angle):
+                    return (_cx + x * math.cos(_a) - y * math.sin(_a),
+                            _cy + x * math.sin(_a) + y * math.cos(_a))
+                outer_pts, inner_pts = [], []
                 for a in range(-70, 71, 10):
                     rad = math.radians(a)
-
-                    # Outer arc point
-                    ox = math.cos(rad) * r
-                    oy = math.sin(rad) * r
-                    outer.append(rot(ox, oy))
-
-                    # Taper thickness from center â†’ ends
-                    taper_factor = 1 - abs(a) / 70   # 1 at center, 0 at tips
-                    thickness = max_thickness * taper_factor
-
-                    # Inner arc point (closer to the outer arc near the tips)
-                    ix = math.cos(rad) * (r - thickness)
-                    iy = math.sin(rad) * (r - thickness)
-                    inner.append(rot(ix, iy))
-
-                # Combine into a single crescent polygon
-                blade_points = []
-                for x, y in outer + inner[::-1]:
-                    blade_points += [x, y]
-
-                self.canvas.create_polygon(
-                    blade_points,
-                    fill=part.color,
-                    outline=part.color,
-                    width=1
-                )
+                    outer_pts.append(_rot(math.cos(rad) * r, math.sin(rad) * r))
+                    tf = 1 - abs(a) / 70
+                    th = max_thickness * tf
+                    inner_pts.append(_rot(math.cos(rad) * (r - th), math.sin(rad) * (r - th)))
+                bp = []
+                for x, y in outer_pts + inner_pts[::-1]:
+                    bp += [x, y]
+                self.canvas.create_polygon(bp, fill=draw_color, outline=draw_color, width=1)
             elif part.rtype == "eblade":
                 # --- CLEAN TAPERED CRESCENT BLADE ---
                 r = part.size * 1.5
@@ -10275,97 +10315,127 @@ class GameFrame(tk.Frame):
                     width=1
                 )
             elif part.rtype == "blade1":
-                # --- CLEAN TAPERED CRESCENT BLADE ---
+                # --- ANIMATED SWEEPING CRESCENT ---
                 r = part.size * 0.4
-                max_thickness = part.size * 0.4   # thick in the middle
-                angle = part.angle
+                max_thickness = part.size * 0.4
+                sweep_off = getattr(part, "_sweep_offset", 0.0)
+                angle = part.angle + sweep_off
                 cx, cy = part.x, part.y
-
-                # Rotation helper
-                def rot(x, y):
-                    return (
-                        cx + x * math.cos(angle) - y * math.sin(angle),
-                        cy + x * math.sin(angle) + y * math.cos(angle)
-                    )
-
-                outer = []
-                inner = []
-
-                # Build outer arc and thin inner arc
+                total_life = getattr(part, "_total_life", max(part.life + part.age, 0.001))
+                progress = part.age / total_life
+                alpha = max(0.0, 1.0 - max(0.0, (progress - 0.6) / 0.4))
+                try:
+                    rv = int(self.canvas.winfo_rgb(part.color)[0] / 256 * alpha)
+                    gv = int(self.canvas.winfo_rgb(part.color)[1] / 256 * alpha)
+                    bv = int(self.canvas.winfo_rgb(part.color)[2] / 256 * alpha)
+                    draw_color = f"#{rv:02x}{gv:02x}{bv:02x}"
+                except Exception:
+                    draw_color = part.color
+                def _rot(x, y, _cx=cx, _cy=cy, _a=angle):
+                    return (_cx + x * math.cos(_a) - y * math.sin(_a),
+                            _cy + x * math.sin(_a) + y * math.cos(_a))
+                outer_pts, inner_pts = [], []
                 for a in range(-70, 71, 10):
                     rad = math.radians(a)
-
-                    # Outer arc point
-                    ox = math.cos(rad) * r
-                    oy = math.sin(rad) * r
-                    outer.append(rot(ox, oy))
-
-                    # Taper thickness from center â†’ ends
-                    taper_factor = 1 - abs(a) / 70   # 1 at center, 0 at tips
-                    thickness = max_thickness * taper_factor
-
-                    # Inner arc point (closer to the outer arc near the tips)
-                    ix = math.cos(rad) * (r - thickness)
-                    iy = math.sin(rad) * (r - thickness)
-                    inner.append(rot(ix, iy))
-
-                # Combine into a single crescent polygon
-                blade_points = []
-                for x, y in outer + inner[::-1]:
-                    blade_points += [x, y]
-
-                self.canvas.create_polygon(
-                    blade_points,
-                    fill=part.color,
-                    outline=part.color,
-                    width=1
-        )
+                    outer_pts.append(_rot(math.cos(rad) * r, math.sin(rad) * r))
+                    tf = 1 - abs(a) / 70
+                    th = max_thickness * tf
+                    inner_pts.append(_rot(math.cos(rad) * (r - th), math.sin(rad) * (r - th)))
+                bp = []
+                for x, y in outer_pts + inner_pts[::-1]:
+                    bp += [x, y]
+                self.canvas.create_polygon(bp, fill=draw_color, outline=draw_color, width=1)
+            elif part.rtype == "blade1_fwd":
+                # --- FORWARD LUNGING CRESCENT (strike) ---
+                r = part.size * 0.5
+                max_thickness = part.size * 0.5
+                angle = part.angle
+                cx, cy = part.x, part.y
+                total_life = getattr(part, "_total_life", max(part.life + part.age, 0.001))
+                progress = part.age / total_life
+                alpha = max(0.0, 1.0 - max(0.0, (progress - 0.5) / 0.5))
+                try:
+                    rv = int(self.canvas.winfo_rgb(part.color)[0] / 256 * alpha)
+                    gv = int(self.canvas.winfo_rgb(part.color)[1] / 256 * alpha)
+                    bv = int(self.canvas.winfo_rgb(part.color)[2] / 256 * alpha)
+                    draw_color = f"#{rv:02x}{gv:02x}{bv:02x}"
+                except Exception:
+                    draw_color = part.color
+                def _rot_fwd(x, y, _cx=cx, _cy=cy, _a=angle):
+                    return (_cx + x * math.cos(_a) - y * math.sin(_a),
+                            _cy + x * math.sin(_a) + y * math.cos(_a))
+                outer_pts, inner_pts = [], []
+                for a in range(-70, 71, 10):
+                    rad = math.radians(a)
+                    outer_pts.append(_rot_fwd(math.cos(rad) * r, math.sin(rad) * r))
+                    tf = 1 - abs(a) / 70
+                    th = max_thickness * tf
+                    inner_pts.append(_rot_fwd(math.cos(rad) * (r - th), math.sin(rad) * (r - th)))
+                bp = []
+                for x, y in outer_pts + inner_pts[::-1]:
+                    bp += [x, y]
+                self.canvas.create_polygon(bp, fill=draw_color, outline=draw_color, width=1)
+            elif part.rtype == "eblade1_fwd":
+                # --- FORWARD LUNGING CRESCENT (enemy strike) ---
+                r = part.size * 0.5
+                max_thickness = part.size * 0.5
+                angle = part.angle
+                cx, cy = part.x, part.y
+                total_life = getattr(part, "_total_life", max(part.life + part.age, 0.001))
+                progress = part.age / total_life
+                alpha = max(0.0, 1.0 - max(0.0, (progress - 0.5) / 0.5))
+                try:
+                    rv = int(self.canvas.winfo_rgb(part.color)[0] / 256 * alpha)
+                    gv = int(self.canvas.winfo_rgb(part.color)[1] / 256 * alpha)
+                    bv = int(self.canvas.winfo_rgb(part.color)[2] / 256 * alpha)
+                    draw_color = f"#{rv:02x}{gv:02x}{bv:02x}"
+                except Exception:
+                    draw_color = part.color
+                def _rot_efwd(x, y, _cx=cx, _cy=cy, _a=angle):
+                    return (_cx + x * math.cos(_a) - y * math.sin(_a),
+                            _cy + x * math.sin(_a) + y * math.cos(_a))
+                outer_pts, inner_pts = [], []
+                for a in range(-70, 71, 10):
+                    rad = math.radians(a)
+                    outer_pts.append(_rot_efwd(math.cos(rad) * r, math.sin(rad) * r))
+                    tf = 1 - abs(a) / 70
+                    th = max_thickness * tf
+                    inner_pts.append(_rot_efwd(math.cos(rad) * (r - th), math.sin(rad) * (r - th)))
+                bp = []
+                for x, y in outer_pts + inner_pts[::-1]:
+                    bp += [x, y]
+                self.canvas.create_polygon(bp, fill=draw_color, outline=draw_color, width=1)
             elif part.rtype == "eblade1":
-                # --- CLEAN TAPERED CRESCENT BLADE ---
+                # --- ANIMATED SWEEPING CRESCENT ---
                 r = part.size * 0.4
-                max_thickness = part.size * 0.4   # thick in the middle
-                angle = part.angle
+                max_thickness = part.size * 0.4
+                sweep_off = getattr(part, "_sweep_offset", 0.0)
+                angle = part.angle + sweep_off
                 cx, cy = part.x, part.y
-
-                # Rotation helper
-                def rot(x, y):
-                    return (
-                        cx + x * math.cos(angle) - y * math.sin(angle),
-                        cy + x * math.sin(angle) + y * math.cos(angle)
-                    )
-
-                outer = []
-                inner = []
-
-                # Build outer arc and thin inner arc
+                total_life = getattr(part, "_total_life", max(part.life + part.age, 0.001))
+                progress = part.age / total_life
+                alpha = max(0.0, 1.0 - max(0.0, (progress - 0.6) / 0.4))
+                try:
+                    rv = int(self.canvas.winfo_rgb(part.color)[0] / 256 * alpha)
+                    gv = int(self.canvas.winfo_rgb(part.color)[1] / 256 * alpha)
+                    bv = int(self.canvas.winfo_rgb(part.color)[2] / 256 * alpha)
+                    draw_color = f"#{rv:02x}{gv:02x}{bv:02x}"
+                except Exception:
+                    draw_color = part.color
+                def _rot(x, y, _cx=cx, _cy=cy, _a=angle):
+                    return (_cx + x * math.cos(_a) - y * math.sin(_a),
+                            _cy + x * math.sin(_a) + y * math.cos(_a))
+                outer_pts, inner_pts = [], []
                 for a in range(-70, 71, 10):
                     rad = math.radians(a)
-
-                    # Outer arc point
-                    ox = math.cos(rad) * r
-                    oy = math.sin(rad) * r
-                    outer.append(rot(ox, oy))
-
-                    # Taper thickness from center â†’ ends
-                    taper_factor = 1 - abs(a) / 70   # 1 at center, 0 at tips
-                    thickness = max_thickness * taper_factor
-
-                    # Inner arc point (closer to the outer arc near the tips)
-                    ix = math.cos(rad) * (r - thickness)
-                    iy = math.sin(rad) * (r - thickness)
-                    inner.append(rot(ix, iy))
-
-                # Combine into a single crescent polygon
-                blade_points = []
-                for x, y in outer + inner[::-1]:
-                    blade_points += [x, y]
-
-                self.canvas.create_polygon(
-                    blade_points,
-                    fill=part.color,
-                    outline=part.color,
-                    width=1
-        )
+                    outer_pts.append(_rot(math.cos(rad) * r, math.sin(rad) * r))
+                    tf = 1 - abs(a) / 70
+                    th = max_thickness * tf
+                    inner_pts.append(_rot(math.cos(rad) * (r - th), math.sin(rad) * (r - th)))
+                bp = []
+                for x, y in outer_pts + inner_pts[::-1]:
+                    bp += [x, y]
+                self.canvas.create_polygon(bp, fill=draw_color, outline=draw_color, width=1)
             elif part.rtype == "shield":
                 # outlined circle (no fill)
                 self.canvas.create_oval(
@@ -10606,7 +10676,7 @@ class GameFrame(tk.Frame):
             y += 6
             if y < PY + PH - 50:
                 y = heading('Levelling Up', y)
-                y = para('Each level-up grants 2 Stat Points and 1 Skill Point.\n'
+                y = para('Each level-up grants 3 Stat Points and 1 Skill Point.\n'
                          'Stat Points are spent in the Stats panel (P).\n'
                          f'Your class ({p.class_name}) also gains automatic stats each level.', y)
 
@@ -10697,6 +10767,7 @@ class GameFrame(tk.Frame):
                     ('Right Click',    'Use consumable in active item slot'),
                     ('1 – 5',          'Select skill hotbar slot'),
                     ('T / Y / U',      'Select consumable hotbar slot 0 / 1 / 2'),
+                    ('R',              'Rotate beam skill (when active)'),
                 ]),
                 ('UI & Menus', [
                     ('H',              'Open / close this Help screen'),
