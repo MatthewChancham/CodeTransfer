@@ -193,10 +193,10 @@ class Player:
         
         # Base stats - Monk gets different starting stats
         if class_name == 'Monk':
-            self.strength=5; self.vitality=10; self.agility=30  # +5 VIT
+            self.strength=5; self.vitality=10; self.agility=5  # +5 VIT
             self.intelligence=-1000; self.wisdom=0; self.will=0; self.constitution=5
         else:
-            self.strength=5; self.vitality=5; self.agility=30
+            self.strength=5; self.vitality=5; self.agility=5
             self.intelligence=5; self.wisdom=5; self.will=5; self.constitution=3
         
         self.level=1; self.xp=0; self.xp_to_next=100
