@@ -204,7 +204,7 @@ class Player:
             self.strength=5; self.vitality=10; self.agility=5  # +5 VIT
             self.intelligence=-1000; self.wisdom=0; self.will=0; self.constitution=5
         else:
-            self.strength=5000; self.vitality=500; self.agility=50
+            self.strength=5; self.vitality=5; self.agility=5
             self.intelligence=5; self.wisdom=5; self.will=5; self.constitution=3
         
         self.level=1; self.xp=0; self.xp_to_next=100
@@ -367,6 +367,7 @@ class Player:
             'Permafrost Burst': 6.0,
             'Teleport': 2.0,
             'Invisibility': 12.0,
+            'Orbiting Blade': 10.0,
         }
         
         # Add skills from ALL equipped items (including soulbound)
@@ -1672,7 +1673,26 @@ class Player:
                         push = pushback_strength * (1 - d / radius)
                         e.x += math.cos(angle) * push
                         e.y += math.sin(angle) * push
-        # Store item skill functions for lookup
+        def orbiting_blade(player, game):
+            """Summon 3 greatsword projectiles that orbit the player for 3s then launch at the nearest enemy."""
+            orbit_radius = 90
+            num_blades   = 3
+            spin_speed   = 3.5   # rad/s
+            orbit_dur    = 3.0   # seconds before launch
+
+            # Store orbit state on the player
+            if not hasattr(player, '_orbit_blades'):
+                player._orbit_blades = []
+
+            # Spawn 3 blade orbit entries
+            for i in range(num_blades):
+                player._orbit_blades.append({
+                    'angle':    (2 * math.pi / num_blades) * i,
+                    'launched': False,
+                    'spawn_t':  time.time(),
+                    'dur':      orbit_dur,
+                })
+
         # Store item skill functions for lookup
         self.item_skill_functions = {
             'Flame Strike': flame_strike,
@@ -1696,6 +1716,7 @@ class Player:
             'Permafrost Burst': permafrost_burst,  # NEW
             'Teleport': teleport,
             'Invisibility': invisibility,
+            'Orbiting Blade': orbiting_blade,
         }
         # Assign skills based on class
         self.skills.clear()
@@ -3292,6 +3313,51 @@ class CoinParticle:
                            fill="#FFD700",outline="#B8860B",width=2)
         canvas.create_text(sx,sy+by,text="$",fill="#8B6914",font=("Arial",7,"bold"))
 
+class WeaponParticle:
+    """Floating weapon pickup that bobs in place until the player walks over it."""
+    def __init__(self, x, y, item):
+        self.x = x + random.randint(-30, 30)
+        self.y = y + random.randint(-30, 30)
+        self.item = item          # InventoryItem to grant on pickup
+        self.lifetime = 60.0     # disappears after 60s if not picked up
+        self.size = 14
+        self._bob = random.uniform(0, math.pi * 2)
+        self._spin = random.uniform(0, math.pi * 2)
+
+    def update(self, dt):
+        self.lifetime -= dt
+        self._bob   += dt * 2.5
+        self._spin  += dt * 1.8
+        return self.lifetime > 0
+
+    def draw(self, canvas, sx, sy):
+        by = math.sin(self._bob) * 3
+        # Glow ring
+        pulse = abs(math.sin(self._bob * 0.8)) * 4
+        canvas.create_oval(sx - self.size - pulse, sy - self.size - pulse + by,
+                           sx + self.size + pulse, sy + self.size + pulse + by,
+                           fill='', outline='#aa66ff', width=2)
+        # Sword silhouette (tiny) centred on particle
+        _a = self._spin
+        _ca = math.cos(_a); _sa = math.sin(_a)
+        _pa = math.cos(_a + math.pi/2); _ps = math.sin(_a + math.pi/2)
+        # Blade
+        _bx1 = sx + _ca * 12 + by*0; _by1 = sy + _sa * 12 + by
+        _bx2 = sx - _ca * 8;         _by2 = sy - _sa * 8 + by
+        canvas.create_line(_bx2, _by2, _bx1, _by1, fill='#cccccc', width=4)
+        canvas.create_line(_bx2, _by2, _bx1, _by1, fill='white',   width=2)
+        # Guard
+        _gx = sx - _ca * 2; _gy = sy - _sa * 2 + by
+        canvas.create_line(_gx - _pa*7, _gy - _ps*7, _gx + _pa*7, _gy + _ps*7,
+                           fill='#aaaaaa', width=3)
+        # Rarity glow dot
+        canvas.create_oval(sx - 4, sy - 4 + by, sx + 4, sy + 4 + by,
+                           fill='#a335ee', outline='#cc66ff', width=1)
+        # Name label
+        canvas.create_text(sx, sy - self.size - 10 + by,
+                           text=self.item.name, fill='#cc88ff',
+                           font=('Arial', 7, 'bold'))
+
 class Summoned:
     def __init__(self, name, hp, atk, spd, x, y, duration=10.0, role="loyal", owner=None, mana_upkeep=0.0):
         self.name = name
@@ -4626,17 +4692,21 @@ class Boss(Enemy):
             if self.gs_rapid_stage > 9:   # max 9 bursts in 2.4s
                 break
             ang = math.atan2(player.y - self.y, player.x - self.x)
-            # 3 slashes per burst, random visual spin angle (not spread in travel dir)
+            # 3 slashes per burst — each gets a random tilt ±90° around the aim direction
+            # so they look like tumbling blades, not a uniform soundwave pattern
             for _ in range(3):
-                vis_angle = random.uniform(0, math.pi * 2)   # random orientation for each blade
                 game.spawn_projectile(self.x, self.y, ang, 13, 3.0, 30,
                                       '#888888', self.atk * 2.0, 'enemy',
                                       stype='slash')
-                # Overwrite the projectile's angle just for display purposes by
-                # spawning with a rotated stype angle stored on the proj
                 p2 = game.projectiles[-1]
-                p2.angle = ang          # travel angle unchanged
-                p2._visual_angle = vis_angle   # used by renderer if slash honours it
+
+                # REAL spread (movement direction)
+                spread = math.radians(20)   # total 10° cone (±5°)
+                p2.angle = ang + random.uniform(-spread * 0.5, spread * 0.5)
+
+                # VISUAL spread (appearance only)
+                p2._visual_angle = ang + random.uniform(-math.radians(15), math.radians(15))
+
 
         if now >= self.gs_state_end:
             self.gs_swing_angle = 0.0
@@ -5605,7 +5675,7 @@ class Room:
                     InventoryItem(
                         'Iron Warden\'s Blade', 'weapon', 'Epic',
                         stats={'strength': 8, 'vitality': 5, 'agility': 3},
-                        skills=['Strikes'],
+                        skills=['Orbiting Blade'],
                         price=0,
                         weapon_type='sword'
                     )
@@ -6615,6 +6685,8 @@ class GameFrame(tk.Frame):
         self.active_item_slot = 0                # 0,1,2
         # Coin particles (world-space)
         self.coin_particles = []
+        # Weapon particles (world-space pickups)
+        self.weapon_particles = []
         # Boss-defeated flags per dungeon — unlocks treasure room below boss room
         self.boss_defeated = {}
         # Inventory UI state
@@ -8899,6 +8971,15 @@ class GameFrame(tk.Frame):
         self.particles=[p for p in self.particles if p.life>0]
         # Tick coin particles
         self.coin_particles = [cp for cp in self.coin_particles if cp.update(dt)]
+        # Tick weapon particles and check for pickup
+        for wp in list(self.weapon_particles):
+            if not wp.update(dt):
+                self.weapon_particles.remove(wp)
+                continue
+            if distance((self.player.x, self.player.y), (wp.x, wp.y)) < self.player.size + wp.size + 8:
+                self.player.add_item_to_inventory(wp.item)
+                self.player.update_equipped_skills()
+                self.weapon_particles.remove(wp)
         self.player.unlock_skills()
         for s in list(self.summons):
             s.update(self, dt)
@@ -9072,6 +9153,27 @@ class GameFrame(tk.Frame):
                 ptype='smoke_bomb', stype='smoke_bomb'
             )
             proj.hit_ids = set()
+
+        # ── Orbiting Blade: spin blades then launch at nearest enemy ─────────
+        if hasattr(p, '_orbit_blades') and p._orbit_blades:
+            spin_speed = 3.5
+            now_o = time.time()
+            for blade in list(p._orbit_blades):
+                blade['angle'] += spin_speed * dt
+                elapsed = now_o - blade['spawn_t']
+                if elapsed >= blade['dur'] and not blade['launched']:
+                    blade['launched'] = True
+                    # Launch at nearest enemy
+                    if self.room.enemies:
+                        target = min(self.room.enemies,
+                                     key=lambda e: distance((p.x, p.y), (e.x, e.y)))
+                        ox = p.x + math.cos(blade['angle']) * 90
+                        oy = p.y + math.sin(blade['angle']) * 90
+                        ang = math.atan2(target.y - oy, target.x - ox)
+                        self.spawn_projectile(ox, oy, ang, 14, 4, 22,
+                                              '#888888', p.atk * 3.0, 'player',
+                                              stype='greatsword_proj')
+                    p._orbit_blades.remove(blade)
 
         # Coin particle collection
         for cp in list(self.coin_particles):
@@ -11043,54 +11145,48 @@ class GameFrame(tk.Frame):
 
         # ── Treasure room chest ──────────────────────────────────────────────
         if getattr(self.room, '_is_treasure_room', False):
-            for deco in self.room.decorations:
+            for deco in list(self.room.decorations):
                 if deco.get('type') == 'treasure_chest':
                     cx, cy = deco['x'], deco['y']
-                    opened = deco.get('opened', False)
-                    # Draw chest body
-                    if opened:
-                        self.canvas.create_rectangle(cx-28, cy-16, cx+28, cy+18,
-                                                     fill='#5c3a1e', outline='#FFD700', width=2)
-                        self.canvas.create_text(cx, cy, text='(empty)', fill='#888866',
-                                                font=('Arial', 9))
-                    else:
-                        # Chest closed
-                        self.canvas.create_rectangle(cx-28, cy-16, cx+28, cy+18,
-                                                     fill='#7a4a18', outline='#FFD700', width=3)
-                        self.canvas.create_rectangle(cx-28, cy-16, cx+28, cy-2,
-                                                     fill='#8B5e20', outline='#FFD700', width=2)
-                        # Lock
-                        self.canvas.create_oval(cx-6, cy-10, cx+6, cy+2,
-                                                fill='#FFD700', outline='#B8860B', width=2)
-                        self.canvas.create_rectangle(cx-4, cy-3, cx+4, cy+5,
-                                                     fill='#FFD700', outline='#B8860B')
-                        # Glow
-                        _pulse = abs(math.sin(time.time() * 2.5)) * 6
-                        self.canvas.create_oval(cx-34-_pulse, cy-22-_pulse,
-                                                cx+34+_pulse, cy+24+_pulse,
-                                                fill='', outline='#FFD700',
-                                                width=2, stipple='gray50')
-                        # Prompt
-                        d_chest = distance((self.player.x, self.player.y), (cx, cy))
-                        if d_chest < 80:
-                            self.canvas.create_text(cx, cy - 36, text='F — Open Chest',
-                                                    fill='#FFD700', font=('Arial', 11, 'bold'))
-                            if self.keys.get('f') or self.keys.get('e'):
-                                self.keys['f'] = False; self.keys['e'] = False
-                                deco['opened'] = True
-                                # Award coins
-                                self.player.coins += deco.get('coins', 0)
-                                # Add items to inventory
-                                for it in deco.get('items', []):
-                                    self.player.add_item_to_inventory(it)
-                                    # Register the sword skill function
-                                    self.player.populate_skills()
-                                    self.player.update_equipped_skills()
+                    # Draw chest
+                    self.canvas.create_rectangle(cx-28, cy-16, cx+28, cy+18,
+                                                 fill='#7a4a18', outline='#FFD700', width=3)
+                    self.canvas.create_rectangle(cx-28, cy-16, cx+28, cy-2,
+                                                 fill='#8B5e20', outline='#FFD700', width=2)
+                    # Lock
+                    self.canvas.create_oval(cx-6, cy-10, cx+6, cy+2,
+                                            fill='#FFD700', outline='#B8860B', width=2)
+                    self.canvas.create_rectangle(cx-4, cy-3, cx+4, cy+5,
+                                                 fill='#FFD700', outline='#B8860B')
+                    # Glow
+                    _pulse = abs(math.sin(time.time() * 2.5)) * 6
+                    self.canvas.create_oval(cx-34-_pulse, cy-22-_pulse,
+                                            cx+34+_pulse, cy+24+_pulse,
+                                            fill='', outline='#FFD700',
+                                            width=2, stipple='gray50')
+                    # Prompt + open
+                    d_chest = distance((self.player.x, self.player.y), (cx, cy))
+                    if d_chest < 80:
+                        self.canvas.create_text(cx, cy - 36, text='F — Open Chest',
+                                                fill='#FFD700', font=('Arial', 11, 'bold'))
+                        if self.keys.get('f') or self.keys.get('e'):
+                            self.keys['f'] = False; self.keys['e'] = False
+                            # Remove chest from room so it disappears
+                            self.room.decorations.remove(deco)
+                            # Spray coin particles
+                            coins_total = deco.get('coins', 800)
+                            num_coins   = 20
+                            val_each    = coins_total // num_coins
+                            for _ in range(num_coins):
+                                self.coin_particles.append(CoinParticle(cx, cy, val_each))
+                            # Spawn weapon particle for each item
+                            for it in deco.get('items', []):
+                                self.weapon_particles.append(WeaponParticle(cx, cy, it))
 
-                    # Room flavour text
-                    self.canvas.create_text(WINDOW_W//2, 36,
-                                            text="⚔  Warden's Vault  ⚔",
-                                            fill='#FFD700', font=('Arial', 13, 'bold'))
+            # Room flavour text
+            self.canvas.create_text(WINDOW_W//2, 36,
+                                    text="⚔  Warden's Vault  ⚔",
+                                    fill='#FFD700', font=('Arial', 13, 'bold'))
 
         def shade_color(color, factor):
             """
@@ -11530,15 +11626,15 @@ class GameFrame(tk.Frame):
                 _gx = _ox + _ca * 4;          _gy = _oy + _sa * 4
                 # Dimensions (proportional to draw_greatsword)
                 _hl = _sz * 1.4;  _bl = _sz * 3.8
-                _bw = _sz * 0.32; _tl = _sz * 0.7; _gl = _sz * 1.6
+                _bw = _sz * 0.35; _tl = _sz * 0.75; _gl = _sz * 1.6
                 # Points
                 _pom_x = _ox - _ca*(_hl+6);  _pom_y = _oy - _sa*(_hl+6)
                 _end_x = _gx + _ca*_bl;       _end_y = _gy + _sa*_bl
                 _tip_x = _end_x + _ca*_tl;   _tip_y = _end_y + _sa*_tl
                 _r1x=_gx+_pa*_bw;    _r1y=_gy+_ps*_bw
                 _r2x=_gx-_pa*_bw;    _r2y=_gy-_ps*_bw
-                _r3x=_end_x-_pa*_bw*0.3; _r3y=_end_y-_ps*_bw*0.3
-                _r4x=_end_x+_pa*_bw*0.3; _r4y=_end_y+_ps*_bw*0.3
+                _r3x=_end_x-_pa*_bw;    _r3y=_end_y-_ps*_bw
+                _r4x=_end_x+_pa*_bw;    _r4y=_end_y+_ps*_bw
                 # Handle
                 self.canvas.create_line(_pom_x+1,_pom_y+1,_gx+1,_gy+1,fill='#110800',width=9)
                 self.canvas.create_line(_pom_x,_pom_y,_gx,_gy,fill='#2e1505',width=7)
@@ -12011,6 +12107,16 @@ class GameFrame(tk.Frame):
                 sx, sy = cp.x, cp.y
             if -20 < sx < WINDOW_W + 20 and -20 < sy < WINDOW_H + 20:
                 cp.draw(self.canvas, sx, sy)
+
+        # ── Draw weapon particles (world-space → screen) ─────────────────
+        for wp in self.weapon_particles:
+            if self.dungeon_id == 0:
+                sx = wp.x - self.camera_x
+                sy = wp.y - self.camera_y
+            else:
+                sx, sy = wp.x, wp.y
+            if -20 < sx < WINDOW_W + 20 and -20 < sy < WINDOW_H + 20:
+                wp.draw(self.canvas, sx, sy)
 
         # HUD: HP/Mana/XP
         BAR_X, BAR_W, BAR_H = 10, 200, 20
