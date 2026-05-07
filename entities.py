@@ -3,7 +3,7 @@ import math
 import time
 from constants import *
 from utils import clamp, distance, resolve_overlap
-from items import InventoryItem, ConsumableItem, MAP_ITEM
+from items import InventoryItem, ConsumableItem, MAP_ITEM, SHOP_ITEMS, CONSUMABLE_SHOP_ITEMS
 
 class Projectile:
     def __init__(self,x,y,angle,speed,life,radius,color,damage,owner='player', ptype='normal', stype='basic'):
