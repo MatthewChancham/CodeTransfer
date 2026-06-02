@@ -5,6 +5,7 @@ import time
 from constants import *
 from utils import clamp, distance
 from items import InventoryItem, ConsumableItem, Item
+from entities import Particle
 
 class Player:
     # In Player.__init__, reorder the initialization:

@@ -1,6 +1,8 @@
 import random
 import math
 import time
+import tkinter as tk
+from tkinter import ttk
 from constants import *
 from utils import clamp, distance, resolve_overlap
 from items import InventoryItem, ConsumableItem, MAP_ITEM, SHOP_ITEMS, CONSUMABLE_SHOP_ITEMS
@@ -216,21 +218,8 @@ class Projectile:
                                 game.particles.append(_bp)
                         continue  # spear keeps flying
                     if self.stype == "howl":
-                        angle_deg = math.degrees(self.angle) % 360
-                        arc_extent = 60
-                        thickness = 6
-
-                        for i in range(3):
-                            radius = self.radius * (i + 2)
-                            self.canvas.create_arc(
-                                self.x - radius, self.y - radius,
-                                self.x + radius, self.y + radius,
-                                start=angle_deg - arc_extent / 2,
-                                extent=arc_extent,
-                                style="arc",
-                                outline=self.color,
-                                width=thickness
-                            )
+                        # Howl projectile (audio visualization handled in game render)
+                        pass
 
                     elif self.ptype == 'player_homing_fire':
                         # Flame explosion on enemy hit
@@ -1518,6 +1507,9 @@ class Room:
         # Starting room has no enemies
         if (row, col) == (0, 0):
             return
+        
+        # Import here to avoid circular imports
+        from enemies import spawn_enemies_for_dungeon, spawn_boss_for_room
         
         depth = row + col
         spawn_enemies_for_dungeon(self, dungeon_id, player_level, count=4 + depth)

@@ -10,9 +10,28 @@ from constants import *
 from utils import clamp, distance, resolve_overlap
 from music import music_start, music_stop
 from player import Player
-from items import InventoryItem, ConsumableItem, SHOP_ITEMS, CoinParticle, WeaponParticle
-from entities import Room, Particle, SpawnPoint, NPC
-from enemies import Boss
+from items import Item, InventoryItem, ConsumableItem, SHOP_ITEMS, CoinParticle, WeaponParticle
+from entities import Room, Particle, SpawnPoint, NPC, SkillTreeWindow, GeneralSkillTreeWindow, Projectile
+from enemies import Boss, bomb_explode
+
+def _make_settings_overlay(parent):
+    """Create a settings overlay window."""
+    overlay = tk.Toplevel(parent)
+    overlay.title("Settings")
+    overlay.geometry("300x200")
+    overlay.configure(bg='#1a1a2e')
+    overlay.resizable(False, False)
+    
+    # Settings options (placeholder)
+    tk.Label(overlay, text="Settings", font=("Arial", 14, "bold"), 
+             bg='#1a1a2e', fg='white').pack(pady=10)
+    tk.Label(overlay, text="Game settings will appear here.", 
+             bg='#1a1a2e', fg='#999').pack(pady=20)
+    
+    tk.Button(overlay, text="Close", bg='#2a2a4e', fg='white',
+              command=overlay.destroy).pack(pady=10)
+    
+    return overlay
 
 class GameFrame(tk.Frame):
     def __init__(self,parent,player,on_quit_to_menu,dungeon_id=1):
